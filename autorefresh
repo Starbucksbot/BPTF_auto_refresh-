@@ -1,0 +1,151 @@
+// ==UserScript==
+// @name         Backpack.tf Auto Refresh (Fully automatic for the lazies of traders)
+// @namespace    http://tampermonkey.net/
+// @version      2.6
+// @description  Automatically refreshes the inventory if it hasn't been updated in the last 2 hours or longer.
+// @author       Starbucks
+// @match        https://backpack.tf/profiles/*
+// @grant        none
+// ==/UserScript==
+
+(function () {
+    "use strict";
+
+    /* Settings */
+    const maxRefreshCount = 900; // Maximum number of refresh attempts
+    const refreshInterval = 30000; // Time between refreshes (in ms, default: 60 seconds)
+    const maxAgeInHours = 2; // Threshold for outdated inventory in hours
+    const retryInterval = 30000; // Retry interval when timestamp is missing (30 seconds)
+    const maxRetryAttempts = 4; // Maximum number of retry attempts for missing timestamp
+
+    let refreshCount = 0; // Counter for refresh attempts
+    let retryCount = 0; // Counter for timestamp retry attempts
+    let isRefreshing = false; // Flag to track refresh process
+
+    // Add the "Auto Refresh" button next to the inventory refresh button
+    const refreshButton = document.querySelector("#refresh-inventory");
+    if (refreshButton) {
+        const autoRefreshButton = document.createElement("button");
+        autoRefreshButton.className = "btn btn-panel";
+        autoRefreshButton.id = "auto-refresh";
+        autoRefreshButton.innerText = " ? Auto Refresh ";
+        refreshButton.insertAdjacentElement("afterend", autoRefreshButton);
+
+        autoRefreshButton.addEventListener("click", () => {
+            if (!isRefreshing) {
+                autoRefreshButton.classList.add("disabled");
+                autoRefreshButton.innerText = "⏳ Auto Refreshing...";
+                console.log("[AUTO REFRESH] Manually triggered auto-refresh.");
+                startAutoRefresh(autoRefreshButton);
+            }
+        });
+    }
+
+    // Wait for full page load
+    window.addEventListener("load", () => {
+        console.log("[AUTO REFRESH] Page fully loaded. Checking inventory timestamp...");
+        setTimeout(() => {
+            console.log("[AUTO REFRESH] Starting timestamp check...");
+            checkAndStartAutoRefresh();
+        }, 2000); // 2-second delay to ensure all elements are loaded
+    });
+
+    /**
+     * Checks the inventory's "last updated" timestamp and starts the auto-refresh process if outdated.
+     * If the timestamp is missing, retries up to 4 times with a 30-second delay.
+     */
+    function checkAndStartAutoRefresh() {
+        if (isRefreshing) return; // Prevent multiple triggers
+
+        const timeElement = document.querySelector("#inventory-time-label > time");
+        if (timeElement) {
+            const lastUpdatedTime = timeElement.getAttribute("datetime");
+            console.log(`[AUTO REFRESH] Detected timestamp: ${lastUpdatedTime}`);
+
+            const ageInHours = calculateTimeDifference(lastUpdatedTime);
+            if (ageInHours >= maxAgeInHours) {
+                console.log(`[AUTO REFRESH] Inventory outdated (${ageInHours.toFixed(1)} hours). Starting auto-refresh...`);
+                const autoRefreshButton = document.querySelector("#auto-refresh");
+                if (autoRefreshButton) {
+                    autoRefreshButton.classList.add("disabled");
+                    autoRefreshButton.innerText = "⏳ Auto Refreshing...";
+                }
+                startAutoRefresh(autoRefreshButton);
+            } else {
+                console.log(`[AUTO REFRESH] Inventory is up-to-date (${ageInHours.toFixed(1)} hours). No action needed.`);
+            }
+        } else {
+            retryCount++;
+            if (retryCount <= maxRetryAttempts) {
+                console.warn(`[AUTO REFRESH] Could not find the last updated timestamp. Retrying in 30 seconds... (Attempt ${retryCount}/${maxRetryAttempts})`);
+                setTimeout(checkAndStartAutoRefresh, retryInterval);
+            } else {
+                console.error("[AUTO REFRESH] Could not find the timestamp after 4 attempts. Stopping further checks.");
+            }
+        }
+    }
+
+    /**
+     * Starts the auto-refresh process, refreshing the inventory periodically.
+     */
+    function startAutoRefresh(autoRefreshButton) {
+        isRefreshing = true;
+        const autoRefresh = setInterval(() => {
+            const timeElement = document.querySelector("#inventory-time-label > time");
+
+            if (timeElement) {
+                const lastUpdatedTime = timeElement.getAttribute("datetime");
+                const ageInHours = calculateTimeDifference(lastUpdatedTime);
+
+                if (ageInHours >= maxAgeInHours) {
+                    const refreshInventoryButton = document.querySelector("#refresh-inventory");
+                    if (!refreshInventoryButton.classList.contains("disabled")) {
+                        if (refreshCount < maxRefreshCount) {
+                            refreshInventoryButton.click();
+                            refreshCount++;
+
+                            console.log(`[AUTO REFRESH] Refreshed inventory (${refreshCount}/${maxRefreshCount}).`);
+                            autoRefreshButton.innerText = `⏳ Auto Refreshing... (${refreshCount}/${maxRefreshCount})`;
+                        } else {
+                            stopAutoRefresh(autoRefresh, "Reached refresh limit.");
+                        }
+                    }
+                } else {
+                    stopAutoRefresh(autoRefresh, "Inventory is up-to-date.");
+                }
+            } else {
+                stopAutoRefresh(autoRefresh, "Could not find the last updated timestamp.");
+            }
+        }, refreshInterval);
+    }
+
+    /**
+     * Stops the auto-refresh process.
+     * @param {number} interval - The interval ID to clear.
+     * @param {string} reason - The reason for stopping.
+     */
+    function stopAutoRefresh(interval, reason) {
+        clearInterval(interval);
+        isRefreshing = false;
+        refreshCount = 0;
+
+        const autoRefreshButton = document.querySelector("#auto-refresh");
+        if (autoRefreshButton) {
+            autoRefreshButton.classList.remove("disabled");
+            autoRefreshButton.innerText = " ? Auto Refresh ";
+        }
+        console.log(`[AUTO REFRESH] Stopped refreshing: ${reason}`);
+    }
+
+    /**
+     * Calculates the time difference in hours between now and a given ISO datetime.
+     * @param {string} datetime - ISO 8601 datetime string (e.g., "2024-12-17T11:18:23+00:00").
+     * @returns {number} Age in hours.
+     */
+    function calculateTimeDifference(datetime) {
+        const lastUpdated = new Date(datetime);
+        const now = new Date();
+        const diffInMs = now - lastUpdated;
+        return diffInMs / (1000 * 60 * 60); // Convert milliseconds to hours
+    }
+})();
