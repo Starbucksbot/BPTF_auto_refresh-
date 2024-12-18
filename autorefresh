@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Backpack.tf Auto Refresh (Fully automatic for the lazies of traders)
 // @namespace    http://tampermonkey.net/
-// @version      2.6
+// @version      2.9
 // @description  Automatically refreshes the inventory if it hasn't been updated in the last 2 hours or longer.
 // @author       Starbucks
 // @match        https://backpack.tf/profiles/*
@@ -12,11 +12,11 @@
     "use strict";
 
     /* Settings */
-    const maxRefreshCount = 900; // Maximum number of refresh attempts
+    const maxRefreshCount = 300; // Maximum number of refresh attempts
     const refreshInterval = 60000; // Time between refreshes (in ms, default: 60 seconds)
-    const maxAgeInHours = 2; // Threshold for outdated inventory in hours
-    const retryInterval = 30000; // Retry interval when timestamp is missing (30 seconds)
-    const maxRetryAttempts = 4; // Maximum number of retry attempts for missing timestamp
+    const maxAgeInHours = 0.1; // Threshold for outdated inventory in hours
+    const retryInterval = 10000; // Retry interval when timestamp is missing (30 seconds)
+    const maxRetryAttempts = 6; // Maximum number of retry attempts for missing timestamp
 
     let refreshCount = 0; // Counter for refresh attempts
     let retryCount = 0; // Counter for timestamp retry attempts
@@ -92,6 +92,17 @@
         isRefreshing = true;
         const autoRefresh = setInterval(() => {
             const timeElement = document.querySelector("#inventory-time-label > time");
+
+            // Check for private inventory error
+            const privateErrorContainer = document.querySelector("#inventory-error-label");
+            if (privateErrorContainer) {
+                const privateErrorElement = privateErrorContainer.querySelector("span.label.label-danger");
+                if (privateErrorElement && privateErrorElement.innerText.includes("Private inventory")) {
+                    console.error("[AUTO REFRESH] Detected private inventory. Stopping auto-refresh.");
+                    stopAutoRefresh(autoRefresh, "Private inventory detected.");
+                    return;
+                }
+            }
 
             if (timeElement) {
                 const lastUpdatedTime = timeElement.getAttribute("datetime");
