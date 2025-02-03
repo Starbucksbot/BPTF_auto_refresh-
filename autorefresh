@@ -13,7 +13,7 @@
 
     /* Settings */
     const maxRefreshCount = 300; // Maximum number of refresh attempts
-    const refreshInterval = 60000; // Time between refreshes (in ms, default: 60 seconds)
+    const refreshInterval = 180000; // Time between refreshes (in ms, default: 3 min. Since backpack wont refresh anything less)
     const maxAgeInHours = 0.1; // Threshold for outdated inventory in hours
     const retryInterval = 10000; // Retry interval when timestamp is missing (30 seconds)
     const maxRetryAttempts = 6; // Maximum number of retry attempts for missing timestamp
