@@ -7,9 +7,6 @@ Useful for if you have a bot and you want that bp to update. Combine with an aut
     Install BPTF Auto Refresh Userscript
 </a>
 
-
-* copy paste it into tampermonkey or any other
-
 ## Some settings that are configurable depending on your needs. 
 * maxRefreshCount = 900; // Maximum number of refresh attempts
 * refreshInterval = 180000; // Time between refreshes (in ms, default: 3 min since bptf "mod" mald if its less... ) ![image](https://github.com/user-attachments/assets/66100e9b-2cc1-4c3f-a4da-b88acdb2ed76)
