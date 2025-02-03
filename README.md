@@ -3,6 +3,11 @@
 Its based on the old code that existed I just updated it to avoid having to click on the button (I'm not lazy)
 Useful for if you have a bot and you want that bp to update. Combine with an auto reload page? 
 
+<a href="https://raw.githubusercontent.com/Starbucksbot/BPTF_auto_refresh-/main/autorefresh.user.js">
+    Install BPTF Auto Refresh Userscript
+</a>
+
+
 * copy paste it into tampermonkey or any other
 
 ## Some settings that are configurable depending on your needs. 
