@@ -1,7 +1,6 @@
 # BPTF Auto refresh script for tampermonkey
 
-Its based on the old code that existed I just updated it to avoid having to click on the button (I'm not lazy)
-Useful for if you have a bot and you want that bp to update. Combine with an auto reload page? 
+Uses the bptf refresh api to make it easier on the frail backpack servers. It will fallback to normal refresh if needed. 
 
 <a href="https://raw.githubusercontent.com/Starbucksbot/BPTF_auto_refresh-/main/autorefresh.user.js">
     Install BPTF Auto Refresh Userscript
@@ -32,8 +31,3 @@ Useful for if you have a bot and you want that bp to update. Combine with an aut
 - **Purpose**: Limits how many times the script tries to find the timestamp
 - **Default**: 6 attempts (2 minutes total with 20s intervals)
 - **Recommendation**: Increase if page loading is slow
-
-
--Increase maxRefreshCount for longer running sessions
--Decrease refreshInterval for more frequent updates (but risk rate limiting)
--Adjust maxAgeInHours based on how current you need your inventory data
