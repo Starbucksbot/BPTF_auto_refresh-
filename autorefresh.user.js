@@ -29,7 +29,7 @@
     `);
 
     const config = {
-        maxRefreshCount: 900,
+        maxRefreshCount: 100,
         refreshInterval: 180000,
         maxAgeInHours: 0.1, // 6 minutes
         retryInterval: 20000,
