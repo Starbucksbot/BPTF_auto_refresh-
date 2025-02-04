@@ -1,162 +1,284 @@
 // ==UserScript==
-// @name         Backpack.tf Auto Refresh (Fully automatic for the lazies of traders)
+// @name         Backpack.tf Auto Refresh (API + HTML)
 // @namespace    http://tampermonkey.net/
-// @version      2.9
-// @description  Automatically refreshes the inventory if it hasn't been updated in the last 2 hours or longer.
+// @version      3.7
+// @description  Automatically refreshes inventory using the api instead of just refresh
 // @author       Starbucks
 // @match        https://backpack.tf/profiles/*
-// @grant        none
+// @grant        GM_xmlhttpRequest
+// @grant        GM_addStyle
 // ==/UserScript==
 
 (function () {
     "use strict";
 
-    /* Settings */
-    const maxRefreshCount = 900; // Maximum number of refresh attempts
-    const refreshInterval = 180000; // Time between refreshes (in ms, default: 3 min. Since backpack wont refresh anything less)
-    const maxAgeInHours = 0.1; // Threshold for outdated inventory in hours
-    const retryInterval = 30000; // Retry interval when timestamp is missing (30 seconds)
-    const maxRetryAttempts = 6; // Maximum number of retry attempts for missing timestamp
+    GM_addStyle(`
+        .btn-cyan {
+            background-color: #00ffff !important;
+            border-color: #00cccc !important;
+            color: #000 !important;
+        }
+        .btn-cyan:hover {
+            background-color: #00e6e6 !important;
+        }
+        #auto-refresh .api-count {
+            margin-left: 5px;
+            font-size: 0.8em;
+            opacity: 0.8;
+        }
+    `);
 
-    let refreshCount = 0; // Counter for refresh attempts
-    let retryCount = 0; // Counter for timestamp retry attempts
-    let isRefreshing = false; // Flag to track refresh process
+    const config = {
+        maxRefreshCount: 900,
+        refreshInterval: 180000,
+        maxAgeInHours: 0.1, // 6 minutes
+        retryInterval: 20000,
+        maxRetryAttempts: 6,
+        apiEndpoint: "https://backpack.tf/api/inventory/"
+    };
 
-    // Add the "Auto Refresh" button next to the inventory refresh button
-    const refreshButton = document.querySelector("#refresh-inventory");
-    if (refreshButton) {
-        const autoRefreshButton = document.createElement("button");
-        autoRefreshButton.className = "btn btn-panel";
-        autoRefreshButton.id = "auto-refresh";
-        autoRefreshButton.innerText = " ? Auto Refresh ";
-        refreshButton.insertAdjacentElement("afterend", autoRefreshButton);
+    let state = {
+        refreshCount: 0,
+        apiCallCount: 0,
+        retryCount: 0,
+        isRefreshing: false,
+        steamId: null,
+        intervalId: null,
+        currentMethod: null,
+        timestampRetries: 0
+    };
 
-        autoRefreshButton.addEventListener("click", () => {
-            if (!isRefreshing) {
-                autoRefreshButton.classList.add("disabled");
-                autoRefreshButton.innerText = "⏳ Auto Refreshing...";
-                console.log("[AUTO REFRESH] Manually triggered auto-refresh.");
-                startAutoRefresh(autoRefreshButton);
+    window.addEventListener("load", () => {
+        console.log("[AUTO REFRESH] Page loaded, initializing...");
+        state.steamId = extractSteamId();
+        addAutoRefreshButton();
+        setTimeout(() => startAutoRefresh(), 2000);
+    });
+
+    function extractSteamId() {
+        return window.location.pathname.split("/").pop();
+    }
+
+    function addAutoRefreshButton() {
+        const refreshButton = document.querySelector("#refresh-inventory");
+        if (!refreshButton) return;
+
+        const button = document.createElement("button");
+        button.className = "btn btn-panel";
+        button.innerHTML = `
+            <i class="fa fa-refresh"></i>
+            <span class="btn-text">Auto Refresh</span>
+            <span class="api-count"></span>
+        `;
+        button.id = "auto-refresh";
+        refreshButton.insertAdjacentElement('afterend', button);
+
+        button.addEventListener("click", () => {
+            if (!state.isRefreshing) {
+                startAutoRefresh();
+            } else {
+                stopAutoRefresh("Manual stop");
+                button.classList.add('btn-danger');
+                setTimeout(() => button.classList.remove('btn-danger'), 2000);
             }
         });
     }
 
-    // Wait for full page load
-    window.addEventListener("load", () => {
-        console.log("[AUTO REFRESH] Page fully loaded. Checking inventory timestamp...");
-        setTimeout(() => {
-            console.log("[AUTO REFRESH] Starting timestamp check...");
-            checkAndStartAutoRefresh();
-        }, 2000); // 2-second delay to ensure all elements are loaded
-    });
+    async function startAutoRefresh(useHtmlFallback = false) {
+        if (state.isRefreshing) return;
 
-    /**
-     * Checks the inventory's "last updated" timestamp and starts the auto-refresh process if outdated.
-     * If the timestamp is missing, retries up to 4 times with a 30-second delay.
-     */
-    function checkAndStartAutoRefresh() {
-        if (isRefreshing) return; // Prevent multiple triggers
+        state.isRefreshing = true;
+        state.currentMethod = useHtmlFallback ? "html" : "api";
+        updateButtonState();
 
-        const timeElement = document.querySelector("#inventory-time-label > time");
-        if (timeElement) {
-            const lastUpdatedTime = timeElement.getAttribute("datetime");
-            console.log(`[AUTO REFRESH] Detected timestamp: ${lastUpdatedTime}`);
+        console.log(`[AUTO REFRESH] Starting ${state.currentMethod.toUpperCase()} refresh`);
+        await performRefreshCycle();
 
-            const ageInHours = calculateTimeDifference(lastUpdatedTime);
-            if (ageInHours >= maxAgeInHours) {
-                console.log(`[AUTO REFRESH] Inventory outdated (${ageInHours.toFixed(1)} hours). Starting auto-refresh...`);
-                const autoRefreshButton = document.querySelector("#auto-refresh");
-                if (autoRefreshButton) {
-                    autoRefreshButton.classList.add("disabled");
-                    autoRefreshButton.innerText = "⏳ Auto Refreshing...";
-                }
-                startAutoRefresh(autoRefreshButton);
-            } else {
-                console.log(`[AUTO REFRESH] Inventory is up-to-date (${ageInHours.toFixed(1)} hours). No action needed.`);
+        state.intervalId = setInterval(async () => {
+            await performRefreshCycle();
+        }, config.refreshInterval);
+    }
+
+    async function performRefreshCycle() {
+        try {
+            if (await checkPrivateInventory()) {
+                stopAutoRefresh("Private inventory detected");
+                return;
             }
-        } else {
-            retryCount++;
-            if (retryCount <= maxRetryAttempts) {
-                console.warn(`[AUTO REFRESH] Could not find the last updated timestamp. Retrying in 30 seconds... (Attempt ${retryCount}/${maxRetryAttempts})`);
-                setTimeout(checkAndStartAutoRefresh, retryInterval);
+
+            const timestamp = await getTimestampWithRetry();
+            if (!timestamp) {
+                console.warn("[TIMESTAMP] Could not find timestamp after retries");
+                stopAutoRefresh("Timestamp not found");
+                return;
+            }
+
+            const age = calculateAge(timestamp);
+            console.log(`[AGE CHECK] Current age: ${age.toFixed(2)} hours`);
+
+            if (age < config.maxAgeInHours) {
+                console.log("[AGE CHECK] Inventory is current, stopping refresh");
+                stopAutoRefresh("Inventory is current");
+                return;
+            }
+
+            if (state.currentMethod === "html") {
+                document.querySelector("#refresh-inventory").click();
             } else {
-                console.error("[AUTO REFRESH] Could not find the timestamp after 4 attempts. Stopping further checks.");
+                await triggerApiRefresh();
+                state.apiCallCount++;
+            }
+
+            state.refreshCount++;
+            updateButtonState();
+            checkRefreshLimits();
+        } catch (error) {
+            console.warn("[Refresh Error]", error);
+            if (state.currentMethod === "api") {
+                state.currentMethod = "html";
+                updateButtonState();
             }
         }
     }
 
-    /**
-     * Starts the auto-refresh process, refreshing the inventory periodically.
-     */
-    function startAutoRefresh(autoRefreshButton) {
-        isRefreshing = true;
-        const autoRefresh = setInterval(() => {
+    async function getTimestampWithRetry() {
+        state.timestampRetries = 0;
+        while (state.timestampRetries < config.maxRetryAttempts) {
+            const timestamp = await findTimestamp();
+            if (timestamp) return timestamp;
+
+            state.timestampRetries++;
+            if (state.timestampRetries < config.maxRetryAttempts) {
+                console.log(`[TIMESTAMP] Retrying in 20 seconds... (${state.timestampRetries}/${config.maxRetryAttempts})`);
+                await sleep(config.retryInterval);
+            }
+        }
+        return null;
+    }
+
+    async function findTimestamp() {
+        try {
+            // Try direct DOM access first
             const timeElement = document.querySelector("#inventory-time-label > time");
-
-            // Check for private inventory error
-            const privateErrorContainer = document.querySelector("#inventory-error-label");
-            if (privateErrorContainer) {
-                const privateErrorElement = privateErrorContainer.querySelector("span.label.label-danger");
-                if (privateErrorElement && privateErrorElement.innerText.includes("Private inventory")) {
-                    console.error("[AUTO REFRESH] Detected private inventory. Stopping auto-refresh.");
-                    stopAutoRefresh(autoRefresh, "Private inventory detected.");
-                    return;
-                }
-            }
-
             if (timeElement) {
-                const lastUpdatedTime = timeElement.getAttribute("datetime");
-                const ageInHours = calculateTimeDifference(lastUpdatedTime);
-
-                if (ageInHours >= maxAgeInHours) {
-                    const refreshInventoryButton = document.querySelector("#refresh-inventory");
-                    if (!refreshInventoryButton.classList.contains("disabled")) {
-                        if (refreshCount < maxRefreshCount) {
-                            refreshInventoryButton.click();
-                            refreshCount++;
-
-                            console.log(`[AUTO REFRESH] Refreshed inventory (${refreshCount}/${maxRefreshCount}).`);
-                            autoRefreshButton.innerText = `⏳ Auto Refreshing... (${refreshCount}/${maxRefreshCount})`;
-                        } else {
-                            stopAutoRefresh(autoRefresh, "Reached refresh limit.");
-                        }
-                    }
-                } else {
-                    stopAutoRefresh(autoRefresh, "Inventory is up-to-date.");
-                }
-            } else {
-                stopAutoRefresh(autoRefresh, "Could not find the last updated timestamp.");
+                return timeElement.getAttribute("datetime");
             }
-        }, refreshInterval);
-    }
 
-    /**
-     * Stops the auto-refresh process.
-     * @param {number} interval - The interval ID to clear.
-     * @param {string} reason - The reason for stopping.
-     */
-    function stopAutoRefresh(interval, reason) {
-        clearInterval(interval);
-        isRefreshing = false;
-        refreshCount = 0;
+            // Fallback to web scraping
+            const response = await fetch(window.location.href);
+            const text = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(text, 'text/html');
 
-        const autoRefreshButton = document.querySelector("#auto-refresh");
-        if (autoRefreshButton) {
-            autoRefreshButton.classList.remove("disabled");
-            autoRefreshButton.innerText = " ? Auto Refresh ";
+            const scrapedElement = doc.querySelector("#inventory-time-label > time");
+            if (scrapedElement) {
+                return scrapedElement.getAttribute("datetime");
+            }
+
+            // Final fallback: regex search
+            const timestampMatch = text.match(/datetime="([^"]+)"/);
+            if (timestampMatch) {
+                return timestampMatch[1];
+            }
+
+            return null;
+        } catch (error) {
+            console.warn("[TIMESTAMP ERROR]", error);
+            return null;
         }
-        console.log(`[AUTO REFRESH] Stopped refreshing: ${reason}`);
     }
 
-    /**
-     * Calculates the time difference in hours between now and a given ISO datetime.
-     * @param {string} datetime - ISO 8601 datetime string (e.g., "2024-12-17T11:18:23+00:00").
-     * @returns {number} Age in hours.
-     */
-    function calculateTimeDifference(datetime) {
-        const lastUpdated = new Date(datetime);
-        const now = new Date();
-        const diffInMs = now - lastUpdated;
-        return diffInMs / (1000 * 60 * 60); // Convert milliseconds to hours
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function calculateAge(timestamp) {
+        const lastUpdated = new Date(timestamp);
+        return (Date.now() - lastUpdated) / (1000 * 60 * 60);
+    }
+
+    function triggerApiRefresh() {
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: "POST",
+                url: `${config.apiEndpoint}${state.steamId}/refresh`,
+                onload: (response) => {
+                    if (response.status === 200) {
+                        const data = JSON.parse(response.responseText);
+                        logApiResponse(data);
+                        resolve();
+                    } else {
+                        reject(new Error(`API Error: ${response.status}`));
+                    }
+                },
+                onerror: reject
+            });
+        });
+    }
+
+    function logApiResponse(apiData) {
+        const formattedTimes = {
+            current: formatTimestamp(apiData.current_time * 1000),
+            last_update: formatTimestamp(apiData.last_update * 1000),
+            next_update: formatTimestamp(apiData.next_update * 1000),
+            refresh_in: `${Math.floor((apiData.next_update - apiData.current_time) / 60)} minutes`
+        };
+
+        console.log("[API Response]", {
+            ...apiData,
+            ...formattedTimes
+        });
+    }
+
+    function formatTimestamp(ms) {
+        return new Date(ms).toLocaleString('en-GB', {
+            hour12: false,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        }).replace(',', '');
+    }
+
+    function updateButtonState() {
+        const button = document.querySelector("#auto-refresh");
+        if (!button) return;
+
+        button.className = "btn btn-panel";
+        const counter = button.querySelector(".api-count");
+        counter.textContent = state.currentMethod === "api" ? `API: ${state.apiCallCount}` : '';
+
+        if (state.isRefreshing) {
+            button.classList.add(state.currentMethod === "api" ? "btn-success" : "btn-cyan");
+            const method = state.currentMethod.toUpperCase();
+            button.querySelector(".btn-text").textContent = `${method} Refreshing`;
+        } else {
+            button.querySelector(".btn-text").textContent = "Auto Refresh";
+        }
+    }
+
+    function checkRefreshLimits() {
+        if (state.refreshCount >= config.maxRefreshCount) {
+            stopAutoRefresh("Refresh limit reached");
+        }
+    }
+
+    function stopAutoRefresh(reason = "User request") {
+        clearInterval(state.intervalId);
+        state.isRefreshing = false;
+        state.intervalId = null;
+        updateButtonState();
+        console.log(`[AUTO REFRESH] Stopped: ${reason}`);
+    }
+
+    async function checkPrivateInventory() {
+        const errorLabel = document.querySelector("#inventory-error-label");
+        if (errorLabel && errorLabel.textContent.includes("Private inventory")) {
+            console.log("[PRIVATE INVENTORY] Detected private inventory");
+            return true;
+        }
+        return false;
     }
 })();
