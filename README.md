@@ -8,8 +8,26 @@ Useful for if you have a bot and you want that bp to update. Combine with an aut
 </a>
 
 ## Some settings that are configurable depending on your needs. 
-* maxRefreshCount = 900; // Maximum number of refresh attempts
-* refreshInterval = 180000; // Time between refreshes (in ms, default: 3 min since bptf "mod" mald if its less... ) ![image](https://github.com/user-attachments/assets/66100e9b-2cc1-4c3f-a4da-b88acdb2ed76)
-* maxAgeInHours = 0.1; // How old the inventory needs to be for the script to start auto refreshing without having to click the button. (In hours) Default 10 min
-* retryInterval = 30000; // Retry interval when timestamp is missing (30 seconds) Keep this since it wont detect the time stamp on page load usually since bp takes a while to load
-* maxRetryAttempts = 4; // Maximum number of retry attempts for missing timestamp
+maxRefreshCount:
+    The script will stop after this many refresh attempts
+    Prevents infinite refreshing in case of errors
+    Default: 20 refreshes (about 1 hour at 3-minute intervals)
+refreshInterval:
+    Time to wait between refresh attempts
+    Backpack.tf may rate limit if too frequent
+    Default: 180000ms (3 minutes)
+maxAgeInHours
+    Maximum allowed age of inventory data
+    If inventory is newer than this, script stops
+    Default: 0.1 hours (6 minutes)
+retryInterval
+    Time to wait between timestamp retrieval attempts
+    Allows page to fully load between attempts
+    Default: 20000ms (20 seconds)
+maxRetryAttempts
+    Maximum number of times to retry finding timestamp
+    Prevents infinite retry loops
+    Default: 6 attempts (2 minutes total with 20s intervals)
+Increase maxRefreshCount for longer running sessions
+Decrease refreshInterval for more frequent updates (but risk rate limiting)
+Adjust maxAgeInHours based on how current you need your inventory data
