@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Backpack.tf Auto Refresh (API + HTML)
+// @name         Backpack.tf Auto Refresh (Fully automatic for the lazies of traders)
 // @namespace    http://tampermonkey.net/
 // @version      3.7
 // @description  Automatically refreshes inventory using the api instead of just refresh
