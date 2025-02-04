@@ -8,26 +8,32 @@ Useful for if you have a bot and you want that bp to update. Combine with an aut
 </a>
 
 ## Some settings that are configurable depending on your needs. 
-maxRefreshCount:
-    The script will stop after this many refresh attempts
-    Prevents infinite refreshing in case of errors
-    Default: 20 refreshes (about 1 hour at 3-minute intervals)
-refreshInterval:
-    Time to wait between refresh attempts
-    Backpack.tf may rate limit if too frequent
-    Default: 180000ms (3 minutes)
-maxAgeInHours
-    Maximum allowed age of inventory data
-    If inventory is newer than this, script stops
-    Default: 0.1 hours (6 minutes)
-retryInterval
-    Time to wait between timestamp retrieval attempts
-    Allows page to fully load between attempts
-    Default: 20000ms (20 seconds)
-maxRetryAttempts
-    Maximum number of times to retry finding timestamp
-    Prevents infinite retry loops
-    Default: 6 attempts (2 minutes total with 20s intervals)
-Increase maxRefreshCount for longer running sessions
-Decrease refreshInterval for more frequent updates (but risk rate limiting)
-Adjust maxAgeInHours based on how current you need your inventory data
+### `maxRefreshCount`
+- **Purpose**: Prevents infinite refreshing in case of errors
+- **Default**: 20 refreshes (about 1 hour at 3-minute intervals)
+- **Recommendation**: Increase for longer running sessions
+
+### `refreshInterval`
+- **Purpose**: Controls how often the script attempts to refresh
+- **Default**: 180000ms (3 minutes)
+- **Note**: Backpack.tf may rate limit if set too low
+
+### `maxAgeInHours`
+- **Purpose**: Determines how current the inventory data should be
+- **Default**: 0.1 hours (6 minutes)
+- **Usage**: Script stops when inventory is newer than this value
+
+### `retryInterval`
+- **Purpose**: Time between timestamp retrieval attempts
+- **Default**: 20000ms (20 seconds)
+- **Note**: Allows page to fully load between attempts
+
+### `maxRetryAttempts`
+- **Purpose**: Limits how many times the script tries to find the timestamp
+- **Default**: 6 attempts (2 minutes total with 20s intervals)
+- **Recommendation**: Increase if page loading is slow
+
+
+-Increase maxRefreshCount for longer running sessions
+-Decrease refreshInterval for more frequent updates (but risk rate limiting)
+-Adjust maxAgeInHours based on how current you need your inventory data
